@@ -164,4 +164,4 @@ supabase/migrations/001_init.sql
 - Plantillas guardadas (duplicar un documento existente como base).
 - Re-analizar el mismo Word con prompts más específicos por tipo de documento.
 - Importador desde Google Drive / Dropbox.
-- Galería de portadas alternativas.
+- Galería de portadas alternativas.  
