@@ -222,26 +222,38 @@ function safeBodyStyle(topOffset: string, isLandscape: boolean, extraBottom: str
 
 function renderCover(doc: DocumentModel, assets: Assets): string {
   const isLandscape = doc.orientation === "landscape";
-  const year = doc.meta.date?.match(/\d{4}/)?.[0] || "2026";
+
+  // Título grande de portada: priorizamos el subtítulo descriptivo (lo que vende el documento),
+  // y caemos al título si no hay subtítulo. Pasamos a mayúsculas para mantener el código visual
+  // de las propuestas históricas de La Agencia.
+  const bigTitleRaw = (doc.meta.subtitle || doc.meta.title || "Propuesta de servicios").trim();
+  const bigTitle = bigTitleRaw.toUpperCase();
+
+  // Tipografía adaptativa al formato y a la longitud del título.
+  // Pensada para llenar la portada sin que rebose por más largo que sea el título.
+  const lenFactor = bigTitle.length;
+  const titleSize = isLandscape
+    ? (lenFactor > 38 ? 78 : lenFactor > 26 ? 96 : 116)
+    : (lenFactor > 38 ? 58 : lenFactor > 26 ? 72 : 86);
+  const titleLetter = isLandscape ? "-3.5px" : "-2.5px";
 
   return `
 <section class="doc-page ${doc.orientation}">
-  ${renderLogoHeader(doc, assets, false)}
-  <div style="position:absolute;display:flex;justify-content:space-between;top:${isLandscape ? "1.85in" : "2.2in"};left:0.7in;right:0.7in;font-size:10pt;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);font-weight:500;">
-    <span>${esc(doc.meta.subtitle || "Propuesta")}</span>
+  ${renderLogoHeader(doc, assets, false, /*hero*/ true)}
+  <div style="position:absolute;display:flex;justify-content:space-between;top:${isLandscape ? "2.15in" : "2.55in"};left:0.7in;right:0.7in;font-size:10pt;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);font-weight:500;">
+    <span>${esc(doc.meta.title || "Propuesta")}</span>
     <span>${esc(doc.meta.location || "")}</span>
   </div>
-  <div style="position:absolute;top:${isLandscape ? "2.4in" : "2.75in"};left:0.7in;right:0.7in;height:0.5px;background:var(--ink);"></div>
-  <div style="position:absolute;left:0.7in;right:0.7in;top:${isLandscape ? "2.95in" : "3.5in"};">
-    <div style="font-size:11pt;font-weight:500;letter-spacing:3px;text-transform:uppercase;margin-bottom:0.4in;">${esc(doc.meta.title)}</div>
-    <div style="font-size:${isLandscape ? "148pt" : "110pt"};font-weight:300;letter-spacing:${isLandscape ? "-6px" : "-4px"};line-height:0.85;">
-      ${year}<span style="color:var(--accent);font-weight:500;">.</span>
+  <div style="position:absolute;top:${isLandscape ? "2.7in" : "3.1in"};left:0.7in;right:0.7in;height:0.5px;background:var(--ink);"></div>
+  <div style="position:absolute;left:0.7in;right:0.7in;top:${isLandscape ? "3.25in" : "3.8in"};">
+    <div style="font-size:${titleSize}pt;font-weight:300;letter-spacing:${titleLetter};line-height:0.95;">
+      ${esc(bigTitle)}<span style="color:var(--accent);font-weight:500;">.</span>
     </div>
   </div>
   <div style="position:absolute;left:0.7in;right:0.7in;bottom:0.65in;padding-top:0.22in;border-top:0.5px solid var(--ink);display:grid;grid-template-columns:1fr 1fr 1fr;column-gap:0.5in;">
-    ${footCol("Documento", doc.meta.documentLabel || "")}
+    ${footCol("Documento", doc.meta.documentLabel || "Propuesta de servicios")}
     ${footCol("Para", doc.meta.client || "")}
-    ${footCol("De", "La Agencia x<br/>Navarra Capital")}
+    ${footCol("Fecha", doc.meta.date || "")}
   </div>
 </section>`;
 }
@@ -254,24 +266,33 @@ function footCol(label: string, text: string): string {
 </div>`;
 }
 
-function renderLogoHeader(doc: DocumentModel, assets: Assets, white: boolean): string {
+function renderLogoHeader(doc: DocumentModel, assets: Assets, white: boolean, hero: boolean = false): string {
   const la = white ? assets.logoLAW : assets.logoLA;
   const sepColor = white ? "#FAFAFA" : "var(--ink)";
+  // En portada y contraportada el logo crece para tener más presencia de marca.
+  // En interiores se mantiene discreto.
+  const laHeight = hero ? "1.05in" : "0.6in";
+  const sepHeight = hero ? "0.85in" : "0.5in";
+  const primaryHeight = hero ? "0.95in" : "0.66in";
+  const secondaryHeight = hero ? "0.7in" : "0.5in";
+  const headerHeight = hero ? "1.1in" : "0.75in";
+  const headerTop = hero ? "0.6in" : "0.55in";
+
   const primaryHtml = (doc.logos_primary || []).map((l) =>
-    `<div style="width:1.1px;height:0.5in;background:${sepColor};flex-shrink:0;"></div>
-     <img src="${esc(l.url)}" alt="${esc(l.name)}" style="height:0.66in;"/>`
+    `<div style="width:1.1px;height:${sepHeight};background:${sepColor};flex-shrink:0;"></div>
+     <img src="${esc(l.url)}" alt="${esc(l.name)}" style="height:${primaryHeight};"/>`
   ).join("");
   const secondaryHtml = (doc.logos_secondary || []).length > 0
-    ? `<div style="width:1.1px;height:0.4in;background:${sepColor};flex-shrink:0;opacity:0.5;"></div>` +
+    ? `<div style="width:1.1px;height:${sepHeight};background:${sepColor};flex-shrink:0;opacity:0.5;"></div>` +
       (doc.logos_secondary || []).map((l) =>
-        `<img src="${esc(l.url)}" alt="${esc(l.name)}" style="height:0.5in;opacity:0.85;"/>`
+        `<img src="${esc(l.url)}" alt="${esc(l.name)}" style="height:${secondaryHeight};opacity:0.85;"/>`
       ).join("")
     : "";
 
   return `
-<div style="position:absolute;display:flex;justify-content:space-between;align-items:center;top:0.55in;left:0.7in;right:0.7in;height:0.75in;">
+<div style="position:absolute;display:flex;justify-content:space-between;align-items:center;top:${headerTop};left:0.7in;right:0.7in;height:${headerHeight};">
   <div style="display:flex;align-items:center;gap:0.28in;height:100%;">
-    <img src="${la}" alt="LaAgencia" style="height:0.6in;"/>
+    <img src="${la}" alt="LaAgencia" style="height:${laHeight};"/>
     ${primaryHtml}
     ${secondaryHtml}
   </div>
@@ -304,12 +325,29 @@ function renderSectionHead(number: string, label: string): string {
 }
 
 function renderIntro(s: any, isLandscape: boolean): string {
-  const numCols = s.columns.length;
-  const grid = numCols === 1 ? "1fr" : s.lede ? "4.6in 1fr 1fr" : `repeat(${Math.min(numCols, 3)}, 1fr)`;
   const lh = s.lineHeight || 1.45;
+  const numCols = s.columns.length;
+
+  // VERTICAL: cambiamos por completo el layout. El "lede" ocupa todo el ancho como
+  // párrafo destacado (no en su columna), y debajo el cuerpo se reparte en 2 columnas
+  // anchas en lugar de 3 ahogadas. Si solo hay 1 columna de cuerpo, se queda a 1.
+  if (!isLandscape) {
+    const bodyCols = Math.min(numCols, 2);
+    return `
+${renderSectionHead(s.number, s.label)}
+<div style="${safeBodyStyle("5.0in", isLandscape)}">
+  ${s.lede ? `<div style="font-size:18pt;font-weight:400;line-height:1.3;letter-spacing:-0.2px;margin-bottom:0.4in;max-width:6.5in;">${rt(s.lede)}</div>` : ""}
+  <div style="display:grid;grid-template-columns:repeat(${bodyCols}, 1fr);column-gap:0.45in;">
+    ${s.columns.map((col: string) => `<div style="font-size:11pt;line-height:${lh};">${paragraphs(col, lh)}</div>`).join("")}
+  </div>
+</div>`;
+  }
+
+  // APAISADO: comportamiento original (lede + 2 columnas, o 3 columnas iguales).
+  const grid = numCols === 1 ? "1fr" : s.lede ? "4.6in 1fr 1fr" : `repeat(${Math.min(numCols, 3)}, 1fr)`;
   return `
 ${renderSectionHead(s.number, s.label)}
-<div style="${safeBodyStyle(isLandscape ? "4.0in" : "5.0in", isLandscape)}">
+<div style="${safeBodyStyle("4.0in", isLandscape)}">
   <div style="display:grid;grid-template-columns:${grid};column-gap:0.5in;">
     ${s.lede ? `<div style="font-size:16pt;font-weight:400;line-height:1.35;letter-spacing:-0.2px;">${rt(s.lede)}</div>` : ""}
     ${s.columns.map((col: string) => `<div style="font-size:11.5pt;line-height:${lh};">${paragraphs(col, lh)}</div>`).join("")}
@@ -502,19 +540,21 @@ ${s.number
 }
 
 function renderClosing(doc: DocumentModel, assets: Assets): string {
-  const year = doc.meta.date?.match(/\d{4}/)?.[0] || "2026";
+  const isLandscape = doc.orientation === "landscape";
+  // Claim tipográficamente adaptado al formato y a la longitud para que respire bien.
+  const claimSize = isLandscape ? 58 : 46;
   return `
 <section class="doc-page ${doc.orientation}" style="background:#111;color:#FAFAFA;">
-  ${renderLogoHeader(doc, assets, true)}
-  <div style="position:absolute;left:0.7in;top:2.6in;font-size:10pt;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:#AAA;">Propuesta · ${year}</div>
-  <div style="position:absolute;left:0.7in;right:0.7in;top:3.05in;font-size:62pt;font-weight:300;letter-spacing:-2.2px;line-height:0.95;">
-    Estamos preparados<br/>para hacerlo<br/>
-    <span style="color:var(--accent);font-weight:500;">posible.</span>
+  ${renderLogoHeader(doc, assets, true, /*hero*/ true)}
+  <div style="position:absolute;left:0.7in;top:${isLandscape ? "3.0in" : "4.0in"};font-size:10pt;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:#AAA;">Be proud of your story</div>
+  <div style="position:absolute;left:0.7in;right:0.7in;top:${isLandscape ? "3.45in" : "4.5in"};font-size:${claimSize}pt;font-weight:300;letter-spacing:-1.6px;line-height:1.05;max-width:10in;">
+    Hagamos que tu historia<br/>
+    <span style="color:var(--accent);font-weight:500;">merezca ser contada.</span>
   </div>
   <div style="position:absolute;display:flex;justify-content:space-between;left:0.7in;right:0.7in;bottom:0.7in;font-size:10pt;font-weight:500;letter-spacing:1.5px;text-transform:uppercase;color:#888;padding-top:0.18in;border-top:0.5px solid #333;">
     <span>La Agencia x Navarra Capital</span>
     <span>${esc(doc.meta.location || "Pamplona · Navarra")}</span>
-    <span>${esc(doc.meta.title)}</span>
+    <span>${esc(doc.meta.client || doc.meta.title)}</span>
   </div>
 </section>`;
 }
@@ -601,13 +641,13 @@ ${renderClosing(doc, assets)}
 }
 
 export async function POST(req: NextRequest) {
-  const { doc } = (await req.json()) as { doc: DocumentModel };
-
-  const html = buildHTML(doc);
-
-  const browser = await launchBrowser();
-
+  let browser: any = null;
   try {
+    const { doc } = (await req.json()) as { doc: DocumentModel };
+
+    const html = buildHTML(doc);
+
+    browser = await launchBrowser();
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
     await page.emulateMediaType("print");
@@ -624,7 +664,23 @@ export async function POST(req: NextRequest) {
         "Content-Disposition": `attachment; filename="${doc.meta.title || "documento"}.pdf"`,
       },
     });
+  } catch (err: any) {
+    // Antes los errores se devolvían como 500 con body vacío y dejaban los logs de
+    // Vercel sin pistas claras. Ahora siempre devolvemos JSON con el mensaje real
+    // y lo escupimos en stderr para que aparezca en Vercel → Logs.
+    console.error("[/api/export/pdf] ERROR:", err);
+    return NextResponse.json(
+      {
+        error: "PDF_EXPORT_FAILED",
+        message: err?.message || String(err),
+        stack: err?.stack,
+      },
+      { status: 500 }
+    );
   } finally {
-    await browser.close();
+    if (browser) {
+      try { await browser.close(); } catch {}
+    }
   }
 }
+
