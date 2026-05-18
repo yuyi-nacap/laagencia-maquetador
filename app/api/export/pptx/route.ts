@@ -21,91 +21,118 @@ function imgBase64(filename: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const { doc } = (await req.json()) as { doc: DocumentModel };
+  try {
+    const { doc } = (await req.json()) as { doc: DocumentModel };
 
-  const pres = new PptxGenJS();
-  pres.layout = doc.orientation === "landscape" ? "LAYOUT_16x9" : "LAYOUT_USER_PORTRAIT";
+    const pres = new PptxGenJS();
+    pres.layout = doc.orientation === "landscape" ? "LAYOUT_16x9" : "LAYOUT_USER_PORTRAIT";
 
-  if (doc.orientation === "portrait") {
-    pres.defineLayout({ name: "LAYOUT_USER_PORTRAIT", width: 8.27, height: 11.69 });
-    pres.layout = "LAYOUT_USER_PORTRAIT";
+    if (doc.orientation === "portrait") {
+      pres.defineLayout({ name: "LAYOUT_USER_PORTRAIT", width: 8.27, height: 11.69 });
+      pres.layout = "LAYOUT_USER_PORTRAIT";
+    }
+
+    // Logos (usados en portada y contraportada)
+    const logoLA = `data:image/png;base64,${imgBase64("laagencia-logo.png")}`;
+    const logoLAW = `data:image/png;base64,${imgBase64("laagencia-logo-white.png")}`;
+
+    // -------------------- PORTADA --------------------
+    {
+      const s = pres.addSlide();
+      s.background = { color: BG };
+      addLogoHeader(s, doc, logoLA, false, /*hero*/ true);
+
+      // Cabecera con título corto del documento y localización
+      s.addText(doc.meta.title || "Propuesta", {
+        x: 0.7, y: 2.15, w: 6, h: 0.3,
+        fontFace: "Halyard", fontSize: 10, color: INK_SOFT, bold: true,
+        charSpacing: 1.5,
+      });
+      s.addText(doc.meta.location || "", {
+        x: 6.5, y: 2.15, w: 6, h: 0.3,
+        fontFace: "Halyard", fontSize: 10, color: INK_SOFT, bold: true,
+        align: "right", charSpacing: 1.5,
+      });
+      s.addShape(pres.ShapeType.line, {
+        x: 0.7, y: 2.7, w: 11.93, h: 0,
+        line: { color: INK, width: 0.5 },
+      });
+
+      // Título grande de portada: priorizamos el subtítulo descriptivo, caemos al título.
+      // Antes ocupaba este sitio un "2026." gigante, que no aportaba jerarquía comercial.
+      const bigTitleRaw = (doc.meta.subtitle || doc.meta.title || "Propuesta de servicios").trim();
+      const bigTitle = bigTitleRaw.toUpperCase();
+      const lenFactor = bigTitle.length;
+      const titleSize = lenFactor > 38 ? 64 : lenFactor > 26 ? 80 : 96;
+
+      s.addText(
+        [
+          { text: bigTitle, options: {} },
+          { text: ".", options: { color: ACCENT, bold: true } },
+        ],
+        {
+          x: 0.7, y: 3.25, w: 12, h: 3,
+          fontFace: "Halyard", fontSize: titleSize, color: INK, charSpacing: -3,
+        }
+      );
+
+      // Foot row
+      addCoverFoot(s, doc, pres);
+    }
+
+    // -------------------- SECCIONES --------------------
+    doc.sections.forEach((section, idx) => {
+      renderSectionSlide(pres, doc, section, idx + 2, doc.sections.length + 2);
+    });
+
+    // -------------------- CIERRE --------------------
+    {
+      const s = pres.addSlide();
+      s.background = { color: "111111" };
+      addLogoHeader(s, doc, logoLAW, true, /*hero*/ true);
+      s.addText("Be proud of your story", {
+        x: 0.7, y: 3.0, w: 6, h: 0.3, fontFace: "Halyard", fontSize: 10, color: "AAAAAA", bold: true, charSpacing: 2,
+      });
+      s.addText(
+        [
+          { text: "Hagamos que tu historia\n", options: { color: "FAFAFA" } },
+          { text: "merezca ser contada.", options: { color: ACCENT, bold: true } },
+        ],
+        {
+          x: 0.7, y: 3.45, w: 12, h: 3,
+          fontFace: "Halyard", fontSize: 52, charSpacing: -1.6,
+        }
+      );
+    }
+
+    const buf = (await pres.write({ outputType: "nodebuffer" })) as Buffer;
+
+    return new NextResponse(new Uint8Array(buf), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "Content-Disposition": `attachment; filename="${doc.meta.title || "documento"}.pptx"`,
+      },
+    });
+  } catch (err: any) {
+    console.error("[/api/export/pptx] ERROR:", err);
+    return NextResponse.json(
+      {
+        error: "PPTX_EXPORT_FAILED",
+        message: err?.message || String(err),
+        stack: err?.stack,
+      },
+      { status: 500 }
+    );
   }
-
-  // Logos (usados en portada y contraportada)
-  const logoLA = `data:image/png;base64,${imgBase64("laagencia-logo.png")}`;
-  const logoLAW = `data:image/png;base64,${imgBase64("laagencia-logo-white.png")}`;
-
-  // -------------------- PORTADA --------------------
-  {
-    const s = pres.addSlide();
-    s.background = { color: BG };
-    addLogoHeader(s, doc, logoLA, false);
-
-    s.addText(doc.meta.subtitle || "Propuesta", {
-      x: 0.7, y: 1.85, w: 6, h: 0.3,
-      fontFace: "Halyard", fontSize: 10, color: INK_SOFT, bold: true,
-      charSpacing: 1.5,
-    });
-    s.addText(doc.meta.location || "", {
-      x: 6.5, y: 1.85, w: 6, h: 0.3,
-      fontFace: "Halyard", fontSize: 10, color: INK_SOFT, bold: true,
-      align: "right", charSpacing: 1.5,
-    });
-    s.addShape(pres.ShapeType.line, {
-      x: 0.7, y: 2.4, w: 11.93, h: 0,
-      line: { color: INK, width: 0.5 },
-    });
-
-    s.addText(doc.meta.title, {
-      x: 0.7, y: 2.95, w: 12, h: 0.4,
-      fontFace: "Halyard", fontSize: 11, color: INK, bold: true, charSpacing: 3,
-    });
-    const year = doc.meta.date?.match(/\d{4}/)?.[0] || "2026";
-    s.addText([{ text: year, options: {} }, { text: ".", options: { color: ACCENT, bold: true } }], {
-      x: 0.7, y: 3.4, w: 12, h: 3,
-      fontFace: "Halyard", fontSize: 130, color: INK, charSpacing: -6,
-    });
-
-    // Foot row
-    addCoverFoot(s, doc, pres);
-  }
-
-  // -------------------- SECCIONES --------------------
-  doc.sections.forEach((section, idx) => {
-    renderSectionSlide(pres, doc, section, idx + 2, doc.sections.length + 2);
-  });
-
-  // -------------------- CIERRE --------------------
-  {
-    const s = pres.addSlide();
-    s.background = { color: "111111" };
-    addLogoHeader(s, doc, logoLAW, true);
-    s.addText("Propuesta · " + (doc.meta.date?.match(/\d{4}/)?.[0] || "2026"), {
-      x: 0.7, y: 2.6, w: 6, h: 0.3, fontFace: "Halyard", fontSize: 10, color: "AAAAAA", bold: true, charSpacing: 2,
-    });
-    s.addText([
-      { text: "Estamos preparados\npara hacerlo\n", options: { color: "FAFAFA" } },
-      { text: "posible.", options: { color: ACCENT, bold: true } },
-    ], {
-      x: 0.7, y: 3.05, w: 12, h: 3,
-      fontFace: "Halyard", fontSize: 56, charSpacing: -2,
-    });
-  }
-
-  const buf = await pres.write({ outputType: "nodebuffer" }) as Buffer;
-
-  return new NextResponse(new Uint8Array(buf), {
-    status: 200,
-    headers: {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      "Content-Disposition": `attachment; filename="${doc.meta.title || "documento"}.pptx"`,
-    },
-  });
 }
 
-function addLogoHeader(s: any, doc: DocumentModel, laAgenciaB64: string, white: boolean) {
-  s.addImage({ data: laAgenciaB64, x: 0.7, y: 0.55, w: 1.95, h: 0.6 });
-  s.addShape("line", { x: 2.85, y: 0.6, w: 0, h: 0.5, line: { color: white ? "FAFAFA" : INK, width: 1 } });
+function addLogoHeader(s: any, doc: DocumentModel, laAgenciaB64: string, white: boolean, hero: boolean = false) {
+  // En portada y contraportada el logo crece para tener más presencia de marca.
+  const w = hero ? 3.4 : 1.95;
+  const h = hero ? 1.05 : 0.6;
+  s.addImage({ data: laAgenciaB64, x: 0.7, y: 0.55, w, h });
+  s.addShape("line", { x: 0.75 + w, y: 0.6, w: 0, h: hero ? 0.85 : 0.5, line: { color: white ? "FAFAFA" : INK, width: 1 } });
   // (los logos primarios que añade el usuario se omiten en PPTX por simplicidad - se pueden añadir como añadido futuro)
   s.addText(doc.meta.date || "", {
     x: 8.5, y: 0.6, w: 4.2, h: 0.4,
@@ -376,3 +403,4 @@ function renderProseBody(s: any, section: any) {
     x: 0.7, y, w: 11.9, h: 5, fontFace: "Halyard", fontSize: 11.5, color: INK,
   });
 }
+
